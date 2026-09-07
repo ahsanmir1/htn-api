@@ -28,6 +28,7 @@ model Organization {
   contacts      Contact[]
   documents     Document[]
   jobs          Job[]
+  discoverySearches DiscoverySearch[]
 
   @@index([externalId])
   @@index([name])
@@ -162,6 +163,8 @@ model Candidate {
   currentOrganization   Organization?    @relation(fields: [currentOrganizationId], references: [id])
   candidateSkills       CandidateSkill[]
   documents             Document[]
+  discoveredProfiles    DiscoveredProfile[]
+  candidateSources      CandidateSource[]
 
   @@index([email])
   @@index([lastName])
@@ -374,4 +377,142 @@ enum ApplicationSource {
   IMPORT
   LINKEDIN
   OTHER
+}
+
+enum SearchProvider {
+  GOOGLE
+  BING
+  SERPER
+  SERPAPI
+  OTHER
+}
+
+enum DiscoverySearchStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum DiscoveryRunStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum DiscoveredProfileStatus {
+  NEW
+  REVIEWED
+  IMPORTED
+  DUPLICATE
+  REJECTED
+}
+
+enum ProfileSource {
+  LINKEDIN
+  GITHUB
+  WEBSITE
+  OTHER
+}
+
+enum CandidateSourceType {
+  APPLICATION
+  LINKEDIN_XRAY
+  REFERRAL
+  MANUAL
+  IMPORT
+  API
+  OTHER
+}
+
+model DiscoverySearch {
+  id               String                    @id @default(uuid()) @db.Uuid
+  organizationId   String                    @db.Uuid
+  name             String
+  query            String
+  roles            Json?
+  skills           Json?
+  locations        Json?
+  companies        Json?
+  status           DiscoverySearchStatus     @default(DRAFT)
+  metadata         Json?
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+  organization     Organization              @relation(fields: [organizationId], references: [id])
+  runs             DiscoverySearchRun[]
+  candidateSources CandidateSource[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([organizationId, status])
+}
+
+model DiscoverySearchRun {
+  id           String             @id @default(uuid()) @db.Uuid
+  searchId     String             @db.Uuid
+  provider     SearchProvider
+  status       DiscoveryRunStatus @default(PENDING)
+  resultCount  Int?
+  newProfiles  Int?
+  duplicates   Int?
+  error        String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  metadata     Json?
+  createdAt    DateTime          @default(now())
+  search       DiscoverySearch   @relation(fields: [searchId], references: [id])
+  profiles     DiscoveredProfile[]
+
+  @@index([searchId])
+  @@index([status])
+  @@index([provider])
+  @@index([searchId, status])
+}
+
+model DiscoveredProfile {
+  id             String                   @id @default(uuid()) @db.Uuid
+  searchRunId    String                   @db.Uuid
+  source         ProfileSource
+  profileUrl     String
+  normalizedUrl  String
+  name           String?
+  headline       String?
+  location       String?
+  snippet        String?
+  status         DiscoveredProfileStatus  @default(NEW)
+  confidence     Float?
+  rawData        Json?
+  metadata       Json?
+  discoveredAt   DateTime                 @default(now())
+  reviewedAt     DateTime?
+  candidateId    String?                  @db.Uuid
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  searchRun      DiscoverySearchRun       @relation(fields: [searchRunId], references: [id])
+  candidate      Candidate?               @relation(fields: [candidateId], references: [id])
+
+  @@unique([searchRunId, normalizedUrl])
+  @@index([normalizedUrl])
+  @@index([searchRunId])
+  @@index([searchRunId, status])
+  @@index([candidateId])
+  @@index([status])
+  @@index([source])
+}
+
+model CandidateSource {
+  id           String              @id @default(uuid()) @db.Uuid
+  candidateId  String              @db.Uuid
+  type         CandidateSourceType
+  sourceUrl    String?
+  searchId     String?             @db.Uuid
+  metadata     Json?
+  createdAt    DateTime            @default(now())
+  candidate    Candidate           @relation(fields: [candidateId], references: [id])
+  search       DiscoverySearch?    @relation(fields: [searchId], references: [id])
+
+  @@index([candidateId])
+  @@index([type])
+  @@index([searchId])
 }
