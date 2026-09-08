@@ -2,7 +2,7 @@ import { Prisma, ApplicationStatus, ApplicationSource, JobStatus } from "@prisma
 import prisma from "../prisma/client.js";
 import { AppError } from "../errors/app-error.js";
 import { ApplicationRepository } from "../repositories/application.repository.js";
-import type { ApplicationWithRelations } from "../repositories/application.repository.js";
+import type { ApplicationWithRelations, ApplicationListFilters } from "../repositories/application.repository.js";
 import { R2StorageService } from "./r2-storage.service.js";
 
 export interface CreateApplicationInput {
@@ -49,7 +49,7 @@ export class ApplicationService {
     return this.storage;
   }
 
-  async createApplication(input: unknown): Promise<ApplicationWithRelations> {
+  async listApplications(filters: ApplicationListFilters = {}) {\n    const page = Math.max(filters.page ?? 1, 1);\n    const limit = Math.min(Math.max(filters.limit ?? 20, 1), 100);\n    const result = await this.repository.findMany({ ...filters, page, limit });\n    const totalPages = Math.ceil(result.total / limit);\n\n    return {\n      applications: result.applications,\n      pagination: { page, limit, total: result.total, totalPages, hasMore: page < totalPages },\n    };\n  }\n\n  async getApplicationById(id: string) {\n    return this.repository.findById(id);\n  }\n\n  async updateApplicationStatus(id: string, status: unknown) {\n    if (typeof status !== "string" || !Object.values(ApplicationStatus).includes(status as ApplicationStatus)) {\n      throw new AppError("VALIDATION_ERROR", "Invalid application status", 400);\n    }\n\n    const existing = await this.repository.findById(id);\n    if (!existing) throw new AppError("APPLICATION_NOT_FOUND", "Application not found", 404);\n\n    return this.repository.updateStatus(id, status as ApplicationStatus);\n  }\n\n  async createApplication(input: unknown): Promise<ApplicationWithRelations> {
     const validated = this.validateInput(input);
     const email = validated.email.trim().toLowerCase();
 
