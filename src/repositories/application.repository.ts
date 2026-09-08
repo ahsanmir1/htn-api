@@ -1,3 +1,4 @@
+import prisma from "../prisma/client.js";
 import { Prisma, OrganizationType, ApplicationStatus, ApplicationSource, DocumentType } from "@prisma/client";
 
 const APPLICATION_INCLUDES = {
@@ -7,13 +8,36 @@ const APPLICATION_INCLUDES = {
       firstName: true,
       lastName: true,
       email: true,
+      phone: true,
+      location: true,
+      currentTitle: true,
+      yearsExperience: true,
+      linkedinUrl: true,
+      documents: {
+        where: { type: DocumentType.RESUME, isLatest: true },
+        orderBy: { createdAt: "desc" as const },
+        take: 1,
+        select: {
+          id: true,
+          fileName: true,
+          mimeType: true,
+          size: true,
+          storageKey: true,
+          createdAt: true,
+        },
+      },
     },
   },
   job: {
     select: {
       id: true,
+      externalId: true,
       title: true,
       status: true,
+      location: true,
+      organization: {
+        select: { name: true },
+      },
     },
   },
 } as const;
@@ -23,6 +47,14 @@ export type ApplicationWithRelations = Prisma.ApplicationGetPayload<{
 }>;
 
 type Client = Prisma.TransactionClient;
+
+export interface ApplicationListFilters {
+  jobId?: string;
+  status?: ApplicationStatus;
+  search?: string;
+  page?: number;
+  limit?: number;
+}
 
 export interface CandidateData {
   email: string;
@@ -63,6 +95,62 @@ export interface ResumeDocumentData {
 }
 
 export class ApplicationRepository {
+  async findMany(filters: ApplicationListFilters = {}) {
+    const page = filters.page ?? 1;
+    const limit = filters.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.ApplicationWhereInput = {};
+
+    if (filters.jobId) {
+      where.job = {
+        OR: [
+          { id: filters.jobId },
+          { externalId: filters.jobId },
+        ],
+      };
+    }
+
+    if (filters.status) where.status = filters.status;
+
+    if (filters.search) {
+      where.OR = [
+        { candidate: { firstName: { contains: filters.search, mode: "insensitive" } } },
+        { candidate: { lastName: { contains: filters.search, mode: "insensitive" } } },
+        { candidate: { email: { contains: filters.search, mode: "insensitive" } } },
+        { job: { title: { contains: filters.search, mode: "insensitive" } } },
+      ];
+    }
+
+    const [applications, total] = await Promise.all([
+      prisma.application.findMany({
+        where,
+        include: APPLICATION_INCLUDES,
+        orderBy: [{ submittedAt: "desc" }, { createdAt: "desc" }],
+        skip,
+        take: limit,
+      }),
+      prisma.application.count({ where }),
+    ]);
+
+    return { applications, total };
+  }
+
+  async findById(id: string) {
+    return prisma.application.findUnique({
+      where: { id },
+      include: APPLICATION_INCLUDES,
+    });
+  }
+
+  async updateStatus(id: string, status: ApplicationStatus) {
+    return prisma.application.update({
+      where: { id },
+      data: { status },
+      include: APPLICATION_INCLUDES,
+    });
+  }
+
   async findJobById(client: Client, jobId: string) {
     return client.job.findFirst({
       where: { externalId: jobId },
@@ -71,36 +159,22 @@ export class ApplicationRepository {
   }
 
   async findCandidateByEmail(client: Client, email: string) {
-    return client.candidate.findFirst({
-      where: { email },
-    });
+    return client.candidate.findFirst({ where: { email } });
   }
 
-  async findApplicationByCandidateAndJob(
-    client: Client,
-    candidateId: string,
-    jobId: string,
-  ) {
+  async findApplicationByCandidateAndJob(client: Client, candidateId: string, jobId: string) {
     return client.application.findFirst({
       where: { candidateId, jobId },
       select: { id: true },
     });
   }
 
-  async upsertCandidate(
-    client: Client,
-    data: CandidateData,
-    existingCandidateId?: string | null,
-  ) {
+  async upsertCandidate(client: Client, data: CandidateData, existingCandidateId?: string | null) {
     const { currentCompany, ...candidateFields } = data;
-
     let currentOrganizationId: string | undefined;
 
     if (currentCompany && currentCompany.trim()) {
-      currentOrganizationId = await this.findOrCreateOrganization(
-        client,
-        currentCompany.trim(),
-      );
+      currentOrganizationId = await this.findOrCreateOrganization(client, currentCompany.trim());
     }
 
     if (existingCandidateId) {
@@ -124,19 +198,13 @@ export class ApplicationRepository {
       if (candidateFields.noticePeriod !== undefined && candidateFields.noticePeriod !== null) updateData.noticePeriod = candidateFields.noticePeriod;
       if (currentOrganizationId) updateData.currentOrganizationId = currentOrganizationId;
 
-      return client.candidate.update({
-        where: { id: existingCandidateId },
-        data: updateData,
-      });
+      return client.candidate.update({ where: { id: existingCandidateId }, data: updateData });
     }
 
     return client.candidate.create({
       data: {
         ...candidateFields,
-        city:
-          candidateFields.location && candidateFields.location.trim()
-            ? candidateFields.location.trim()
-            : undefined,
+        city: candidateFields.location && candidateFields.location.trim() ? candidateFields.location.trim() : undefined,
         currentOrganizationId,
       },
     });
@@ -174,32 +242,6 @@ export class ApplicationRepository {
         version: 1,
         isLatest: true,
       },
-    });
-  }
-
-  async setTalentPoolConsent(
-    client: Client,
-    candidateId: string,
-    data: {
-      contactConsentAt: Date;
-      consentSource: string;
-      metadata?: Record<string, unknown> | null;
-    },
-  ) {
-    const updateData: Record<string, unknown> = {
-      inTalentPool: true,
-      contactConsent: true,
-      contactConsentAt: data.contactConsentAt,
-      consentSource: data.consentSource,
-    };
-
-    if (data.metadata) {
-      updateData.metadata = data.metadata as Prisma.InputJsonValue;
-    }
-
-    return client.candidate.update({
-      where: { id: candidateId },
-      data: updateData,
     });
   }
 
