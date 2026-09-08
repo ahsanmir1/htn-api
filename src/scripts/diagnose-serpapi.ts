@@ -1,3 +1,5 @@
+import "dotenv/config";
+
 import axios from "axios";
 
 const apiKey = process.env.SERPAPI_API_KEY?.trim();
