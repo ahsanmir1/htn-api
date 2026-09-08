@@ -151,6 +151,27 @@ export class ApplicationRepository {
     });
   }
 
+  async setTalentPoolConsent(
+    client: Client,
+    candidateId: string,
+    data: {
+      contactConsentAt: Date;
+      consentSource: string;
+      metadata?: Prisma.InputJsonValue;
+    },
+  ) {
+    return client.candidate.update({
+      where: { id: candidateId },
+      data: {
+        inTalentPool: true,
+        contactConsent: true,
+        contactConsentAt: data.contactConsentAt,
+        consentSource: data.consentSource,
+        ...(data.metadata !== undefined ? { metadata: data.metadata } : {}),
+      },
+    });
+  }
+
   async findJobById(client: Client, jobId: string) {
     return client.job.findFirst({
       where: { externalId: jobId },
