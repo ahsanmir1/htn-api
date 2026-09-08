@@ -51,6 +51,15 @@ async function main() {
           ? {
               title: typeof first.title === "string" ? first.title : null,
               link: typeof first.link === "string" ? first.link : null,
+              redirect_link:
+                typeof first.redirect_link === "string"
+                  ? first.redirect_link
+                  : null,
+              displayed_link:
+                typeof first.displayed_link === "string"
+                  ? first.displayed_link
+                  : null,
+              source: typeof first.source === "string" ? first.source : null,
               snippet: typeof first.snippet === "string" ? first.snippet : null,
             }
           : null,
