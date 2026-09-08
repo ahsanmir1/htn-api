@@ -9,6 +9,8 @@ import type {
 interface SerpApiOrganicResult {
   title?: unknown;
   link?: unknown;
+  redirect_link?: unknown;
+  displayed_link?: unknown;
   snippet?: unknown;
 }
 
@@ -37,6 +39,22 @@ function isValidHttpUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function extractResultUrl(result: Record<string, unknown>): string | null {
+  // Some Google/SerpAPI responses expose link as a relative /goto?... URL.
+  // Prefer redirect_link when it contains the real destination.
+  const candidates = [
+    extractString(result, "redirect_link"),
+    extractString(result, "link"),
+    extractString(result, "displayed_link"),
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate && isValidHttpUrl(candidate)) return candidate;
+  }
+
+  return null;
 }
 
 export class SerpApiClient implements SearchProviderContract {
@@ -139,17 +157,14 @@ export class SerpApiClient implements SearchProviderContract {
 
     for (const item of results) {
       if (!isRecord(item)) continue;
-      const apiResult = item as SerpApiOrganicResult;
 
-      const resultRecord = apiResult as Record<string, unknown>;
-
-      const url = extractString(resultRecord, "link");
-      if (!url || !isValidHttpUrl(url)) continue;
+      const url = extractResultUrl(item);
+      if (!url) continue;
 
       mapped.push({
-        title: extractString(resultRecord, "title"),
+        title: extractString(item, "title"),
         url,
-        snippet: extractString(resultRecord, "snippet"),
+        snippet: extractString(item, "snippet"),
         provider: SearchProvider.SERPAPI,
       });
     }
