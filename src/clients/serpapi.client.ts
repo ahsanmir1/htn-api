@@ -141,11 +141,21 @@ export class SerpApiClient implements SearchProviderContract {
     ];
 
     for (const candidate of candidates) {
-      if (!candidate || !isValidHttpUrl(candidate)) continue;
-      if (!isGoogleRedirect(candidate)) return candidate;
+      if (!candidate) continue;
+
+      // SerpAPI can return Google's relative /goto?... redirect instead of
+      // the destination URL. Resolve it against Google before following it.
+      const resolvedCandidate = candidate.startsWith("/")
+        ? new URL(candidate, "https://www.google.com").toString()
+        : candidate;
+
+      if (!isValidHttpUrl(resolvedCandidate)) continue;
+      if (!isGoogleRedirect(resolvedCandidate) && !resolvedCandidate.includes("/goto?")) {
+        return resolvedCandidate;
+      }
 
       try {
-        const response = await axios.get(candidate, {
+        const response = await axios.get(resolvedCandidate, {
           timeout: this.timeout,
           maxRedirects: 5,
           validateStatus: () => true,
@@ -160,7 +170,8 @@ export class SerpApiClient implements SearchProviderContract {
         if (
           typeof finalUrl === "string" &&
           isValidHttpUrl(finalUrl) &&
-          !isGoogleRedirect(finalUrl)
+          !isGoogleRedirect(finalUrl) &&
+          !finalUrl.includes("/goto?")
         ) {
           return finalUrl;
         }
