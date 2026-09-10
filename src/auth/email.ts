@@ -1,4 +1,5 @@
 const RESEND_API_URL = "https://api.resend.com/emails";
+const DEFAULT_API_ORIGIN = "https://htn-api-production-ab6d.up.railway.app";
 
 export async function sendRecruiterEmail(input: { to: string; subject: string; html: string }): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
@@ -17,12 +18,26 @@ export async function sendRecruiterEmail(input: { to: string; subject: string; h
   return true;
 }
 
+function portalOrigin(): string {
+  return (process.env.RECRUITER_PORTAL_URL ?? "https://headsbaseinc.com").replace(/\/$/, "");
+}
+
+function apiOrigin(): string {
+  return (process.env.RECRUITER_API_URL ?? DEFAULT_API_ORIGIN).replace(/\/$/, "");
+}
+
 export function verificationUrl(token: string): string {
-  const base = process.env.RECRUITER_PORTAL_URL ?? "https://headsbaseinc.com";
-  return `${base.replace(/\/$/, "")}/#/verify-email?token=${encodeURIComponent(token)}`;
+  return `${apiOrigin()}/auth/verify-email?token=${encodeURIComponent(token)}`;
+}
+
+export function verificationSuccessUrl(): string {
+  return `${portalOrigin()}/#/login?verified=1`;
+}
+
+export function verificationFailureUrl(): string {
+  return `${portalOrigin()}/#/login?verified=0`;
 }
 
 export function resetUrl(token: string): string {
-  const base = process.env.RECRUITER_PORTAL_URL ?? "https://headsbaseinc.com";
-  return `${base.replace(/\/$/, "")}/#/reset-password?token=${encodeURIComponent(token)}`;
+  return `${portalOrigin()}/#/reset-password?token=${encodeURIComponent(token)}`;
 }
