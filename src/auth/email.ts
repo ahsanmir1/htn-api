@@ -1,5 +1,6 @@
 const RESEND_API_URL = "https://api.resend.com/emails";
 const DEFAULT_API_ORIGIN = "https://htn-api-production-ab6d.up.railway.app";
+const DEFAULT_PORTAL_ORIGIN = "https://headsbaseinc.com/recruiter-portal";
 
 export async function sendRecruiterEmail(input: { to: string; subject: string; html: string }): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
@@ -19,7 +20,7 @@ export async function sendRecruiterEmail(input: { to: string; subject: string; h
 }
 
 function portalOrigin(): string {
-  return (process.env.RECRUITER_PORTAL_URL ?? "https://headsbaseinc.com").replace(/\/$/, "");
+  return (process.env.RECRUITER_PORTAL_URL ?? DEFAULT_PORTAL_ORIGIN).replace(/\/$/, "");
 }
 
 function apiOrigin(): string {
