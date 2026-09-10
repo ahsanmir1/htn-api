@@ -12,6 +12,8 @@ import {
   signup,
   verifyEmail,
 } from "../auth/recruiter-auth.js";
+import { resendVerificationEmail } from "../auth/reverification.js";
+import { verificationFailureUrl, verificationSuccessUrl } from "../auth/email.js";
 import { requireRecruiter } from "../middleware/recruiter-auth.js";
 
 const router = Router();
@@ -48,8 +50,24 @@ router.get("/me", async (req, res) => {
   catch (error) { return sendError(res, error); }
 });
 
+router.get("/verify-email", async (req, res) => {
+  try {
+    const token = typeof req.query.token === "string" ? req.query.token : "";
+    await verifyEmail(token);
+    return res.redirect(302, verificationSuccessUrl());
+  } catch (error) {
+    console.error("Email verification failed:", error);
+    return res.redirect(302, verificationFailureUrl());
+  }
+});
+
 router.post("/verify-email", async (req, res) => {
   try { return res.json({ success: true, data: await verifyEmail(typeof req.body?.token === "string" ? req.body.token : "") }); }
+  catch (error) { return sendError(res, error); }
+});
+
+router.post("/resend-verification", async (req, res) => {
+  try { await resendVerificationEmail(typeof req.body?.email === "string" ? req.body.email : ""); return res.json({ success: true }); }
   catch (error) { return sendError(res, error); }
 });
 
