@@ -8,6 +8,7 @@ import candidatesRouter from "./routes/candidates.js";
 import discoveryRouter from "./routes/discovery.js";
 import authRouter from "./routes/auth.js";
 import recruiterRouter from "./routes/recruiter.js";
+import atsIntegrationRouter from "./routes/integrations-ats.js";
 import { prepareRecruiterAuth } from "./middleware/recruiter-auth.js";
 import { AppError } from "./errors/app-error.js";
 
@@ -26,7 +27,7 @@ app.use(cors({
   },
   credentials: true,
   methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Accept"],
+  allowedHeaders: ["Content-Type", "Accept", "Authorization"],
 }));
 
 app.use(express.json({ limit: "20mb" }));
@@ -44,6 +45,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
 app.use("/auth", authRouter);
 app.use("/recruiter", recruiterRouter);
+app.use("/integrations/ats", atsIntegrationRouter);
 
 // Public careers/application APIs remain available to the careers site.
 app.use("/api/jobs", jobsRouter);
