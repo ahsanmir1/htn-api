@@ -20,7 +20,11 @@ export async function sendRecruiterEmail(input: { to: string; subject: string; h
 }
 
 function portalOrigin(): string {
-  return (process.env.RECRUITER_PORTAL_URL ?? DEFAULT_PORTAL_ORIGIN).replace(/\/$/, "");
+  const configured = (process.env.RECRUITER_PORTAL_URL ?? DEFAULT_PORTAL_ORIGIN).replace(/\/$/, "");
+  if (configured === "https://headsbaseinc.com" || configured === "https://www.headsbaseinc.com") {
+    return `${configured}/recruiter-portal`;
+  }
+  return configured;
 }
 
 function apiOrigin(): string {
