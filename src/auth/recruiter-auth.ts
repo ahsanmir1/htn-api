@@ -28,9 +28,7 @@ function normalizeEmail(email: unknown): string {
 }
 
 function passwordCheck(password: unknown): string {
-  if (typeof password !== "string" || password.length < 10) {
-    throw new AppError("VALIDATION_ERROR", "Password must be at least 10 characters", 400);
-  }
+  if (typeof password !== "string" || password.length < 10) throw new AppError("VALIDATION_ERROR", "Password must be at least 10 characters", 400);
   return password;
 }
 
@@ -48,17 +46,11 @@ async function verifyPassword(password: string, stored: string): Promise<boolean
   return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
-function hashToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
-}
-
-function cookieOptions(): string {
-  const maxAge = SESSION_DAYS * 24 * 60 * 60;
-  return `${SESSION_COOKIE}=TOKEN; Max-Age=${maxAge}; Path=/; HttpOnly; Secure; SameSite=None`;
-}
+function hashToken(token: string): string { return createHash("sha256").update(token).digest("hex"); }
 
 export function sessionCookieHeader(token: string): string {
-  return cookieOptions().replace("TOKEN", token);
+  const maxAge = SESSION_DAYS * 24 * 60 * 60;
+  return `${SESSION_COOKIE}=${token}; Max-Age=${maxAge}; Path=/; HttpOnly; Secure; SameSite=None`;
 }
 
 export function clearSessionCookieHeader(): string {
@@ -66,9 +58,13 @@ export function clearSessionCookieHeader(): string {
 }
 
 export function getSessionToken(req: { headers: { cookie?: string } }): string | null {
-  const cookie = req.headers.cookie ?? "";
-  const match = cookie.match(new RegExp(`(?:^|;\\s*)${SESSION_COOKIE.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}=([^;]+)`));
-  return match?.[1] ?? null;
+  const cookies = (req.headers.cookie ?? "").split(";");
+  const prefix = `${SESSION_COOKIE}=`;
+  for (const cookie of cookies) {
+    const value = cookie.trim();
+    if (value.startsWith(prefix)) return value.slice(prefix.length) || null;
+  }
+  return null;
 }
 
 export async function ensureRecruiterTables(): Promise<void> {
