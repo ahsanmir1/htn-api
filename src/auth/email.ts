@@ -19,10 +19,10 @@ export async function sendRecruiterEmail(input: { to: string; subject: string; h
 
 export function verificationUrl(token: string): string {
   const base = process.env.RECRUITER_PORTAL_URL ?? "https://headsbaseinc.com";
-  return `${base.replace(/\/$/, "")}/verify-email?token=${encodeURIComponent(token)}`;
+  return `${base.replace(/\/$/, "")}/#/verify-email?token=${encodeURIComponent(token)}`;
 }
 
 export function resetUrl(token: string): string {
   const base = process.env.RECRUITER_PORTAL_URL ?? "https://headsbaseinc.com";
-  return `${base.replace(/\/$/, "")}/reset-password?token=${encodeURIComponent(token)}`;
+  return `${base.replace(/\/$/, "")}/#/reset-password?token=${encodeURIComponent(token)}`;
 }
