@@ -8,6 +8,7 @@ import candidatesRouter from "./routes/candidates.js";
 import discoveryRouter from "./routes/discovery.js";
 import authRouter from "./routes/auth.js";
 import recruiterRouter from "./routes/recruiter.js";
+import recruiterSubmissionsRouter from "./routes/recruiter-submissions.js";
 import atsIntegrationRouter from "./routes/integrations-ats.js";
 import { prepareRecruiterAuth } from "./middleware/recruiter-auth.js";
 import { AppError } from "./errors/app-error.js";
@@ -32,7 +33,6 @@ app.use(cors({
 
 app.use(express.json({ limit: "20mb" }));
 
-// Browser cross-site cookie requests are protected by an explicit Origin check.
 app.use((req: Request, res: Response, next: NextFunction) => {
   const origin = req.headers.origin;
   const protectedRoute = req.path.startsWith("/auth") || req.path.startsWith("/recruiter");
@@ -45,9 +45,9 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
 app.use("/auth", authRouter);
 app.use("/recruiter", recruiterRouter);
+app.use("/recruiter/submissions", recruiterSubmissionsRouter);
 app.use("/integrations/ats", atsIntegrationRouter);
 
-// Public careers/application APIs remain available to the careers site.
 app.use("/api/jobs", jobsRouter);
 app.use("/api/applications", applicationsRouter);
 app.use("/api/resumes", resumesRouter);
