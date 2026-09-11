@@ -16,7 +16,15 @@ async function accessibleJobIds(user: { id:string; organizationId:string; role:s
     const rows = await prisma.$queryRawUnsafe<{id:string}[]>(`SELECT id FROM "Job"`); return rows.map(r=>r.id);
   }
   if (isAdmin(user.role)) {
-    const rows = await prisma.$queryRawUnsafe<{id:string}[]>(`SELECT id FROM "Job" WHERE "organizationId"=$1`,user.organizationId); return rows.map(r=>r.id);
+    const rows = await prisma.$queryRawUnsafe<{id:string}[]>(
+      `SELECT DISTINCT j.id
+       FROM "Job" j
+       LEFT JOIN recruiter_job_access a ON a.job_id=j.id
+       WHERE j."organizationId"=$1 OR a.recruiter_id=$2`,
+      user.organizationId,
+      user.id
+    );
+    return rows.map(r=>r.id);
   }
   const rows = await prisma.$queryRawUnsafe<{id:string}[]>(`SELECT j.id FROM "Job" j JOIN recruiter_job_access a ON a.job_id=j.id WHERE a.recruiter_id=$1`,user.id); return rows.map(r=>r.id);
 }
