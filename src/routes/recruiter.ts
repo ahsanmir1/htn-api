@@ -4,9 +4,11 @@ import { updateProfile } from "../auth/recruiter-auth.js";
 import { requireRecruiter } from "../middleware/recruiter-auth.js";
 import prisma from "../prisma/client.js";
 import { ApplicationStatus } from "@prisma/client";
+import { ApplicationService } from "../services/applications.service.js";
 
 const router = Router();
 router.use(requireRecruiter);
+const applicationService = new ApplicationService();
 function sendError(res: any, error: unknown) { if (error instanceof AppError) return res.status(error.statusCode).json({ success:false, code:error.code, message:error.message }); console.error("Recruiter API failed:",error); return res.status(500).json({success:false,message:"Internal server error"}); }
 function isAdmin(role: string): boolean { return role === "RECRUITER_ADMIN" || role === "PLATFORM_ADMIN"; }
 function isPlatformAdmin(role: string): boolean { return role === "PLATFORM_ADMIN"; }
@@ -50,6 +52,18 @@ router.get("/jobs/:jobId",async(req,res)=>{try{const job=await resolveAccessible
 router.get("/candidates",async(req,res)=>{try{const ids=await accessibleJobIds(req.recruiter!);if(!ids.length)return res.json({success:true,data:[],pagination:{page:1,limit:20,total:0,totalPages:0,hasMore:false}});const search=typeof req.query.search==='string'?req.query.search.trim():"";const page=Math.max(Number(req.query.page)||1,1),limit=Math.min(Math.max(Number(req.query.limit)||20,1),100),offset=(page-1)*limit;const candidates=await prisma.$queryRawUnsafe<any[]>(`SELECT DISTINCT ON (c.id)c.id,c."firstName",c."lastName",c.email,c.phone,c."currentTitle",c.location,c.country,c.city,c."yearsExperience",c."linkedinUrl",c.status,c."createdAt",c."updatedAt" FROM "Candidate" c JOIN "Application" a ON a."candidateId"=c.id WHERE a."jobId"=ANY($1::uuid[]) AND ($2='' OR c."firstName" ILIKE '%'||$2||'%' OR c."lastName" ILIKE '%'||$2||'%' OR c.email ILIKE '%'||$2||'%' OR c."currentTitle" ILIKE '%'||$2||'%') ORDER BY c.id,c."updatedAt" DESC`,ids,search);const sliced=candidates.slice(offset,offset+limit),total=candidates.length;return res.json({success:true,data:sliced,pagination:{page,limit,total,totalPages:Math.ceil(total/limit),hasMore:offset+sliced.length<total}});}catch(e){return sendError(res,e);}});
 
 router.get("/submissions",async(req,res)=>{try{const ids=await accessibleJobIds(req.recruiter!);if(!ids.length)return res.json({success:true,data:[]});const status=typeof req.query.status==='string'&&Object.values(ApplicationStatus).includes(req.query.status as ApplicationStatus)?req.query.status:"";const jobId=typeof req.query.jobId==='string'?req.query.jobId:"";const search=typeof req.query.search==='string'?req.query.search.trim():"";const rows=await prisma.$queryRawUnsafe<any[]>(`SELECT a.id,a.status,a.source,a."submittedAt",a."createdAt",c.id AS "candidateId",c."firstName",c."lastName",c.email,c."currentTitle",c.location,c."linkedinUrl",j.id AS "jobId",j."externalId" AS "jobExternalId",j.title AS "jobTitle",o.name AS "organizationName" FROM "Application" a JOIN "Candidate" c ON c.id=a."candidateId" JOIN "Job" j ON j.id=a."jobId" JOIN "Organization" o ON o.id=j."organizationId" WHERE j.id=ANY($1::uuid[]) AND ($2='' OR a.status::text=$2) AND ($3='' OR j.id::text=$3 OR COALESCE(j."externalId",'')=$3) AND ($4='' OR c."firstName" ILIKE '%'||$4||'%' OR c."lastName" ILIKE '%'||$4||'%' OR c.email ILIKE '%'||$4||'%' OR j.title ILIKE '%'||$4||'%') ORDER BY COALESCE(a."submittedAt",a."createdAt") DESC LIMIT 100`,ids,status,jobId,search);return res.json({success:true,data:rows});}catch(e){return sendError(res,e);}});
+
+router.post("/submissions",async(req,res)=>{try{
+  const user=req.recruiter!;
+  const body={...(req.body??{})};
+  const requestedJobId=typeof body.jobId==="string"?body.jobId.trim():"";
+  if(!requestedJobId)throw new AppError("VALIDATION_ERROR","jobId is required",400);
+  const job=await resolveAccessibleJob(user,requestedJobId);
+  if(!job)throw new AppError("JOB_NOT_FOUND","Job not found or not assigned to you",404);
+  body.jobId=job.id;
+  const application=await applicationService.createApplication(body);
+  return res.status(201).json({success:true,data:{submissionId:application.id,applicationId:application.id,candidateId:application.candidateId,jobId:application.jobId}});
+}catch(e){return sendError(res,e);}});
 
 router.post("/jobs/:jobId/access/:recruiterId",async(req,res)=>{try{const user=req.recruiter!;if(!isAdmin(user.role))throw new AppError("FORBIDDEN","Only recruiter administrators can assign jobs",403);const job=await resolveAccessibleJob(user,req.params.jobId);if(!job)throw new AppError("JOB_NOT_FOUND","Job not found",404);const target=await prisma.$queryRawUnsafe<{id:string;organizationId:string}[]>(`SELECT id,organization_id AS "organizationId" FROM recruiter_users WHERE id=$1 LIMIT 1`,req.params.recruiterId);if(!target[0])throw new AppError("RECRUITER_NOT_FOUND","Recruiter not found",404);if(!isPlatformAdmin(user.role)&&target[0].organizationId!==user.organizationId)throw new AppError("FORBIDDEN","Recruiter is not in your organization",403);await prisma.$executeRawUnsafe(`INSERT INTO recruiter_job_access(recruiter_id,job_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,target[0].id,job.id);return res.status(201).json({success:true});}catch(e){return sendError(res,e);}});
 router.delete("/jobs/:jobId/access/:recruiterId",async(req,res)=>{try{const user=req.recruiter!;if(!isAdmin(user.role))throw new AppError("FORBIDDEN","Only recruiter administrators can change job assignments",403);const job=await resolveAccessibleJob(user,req.params.jobId);if(!job)throw new AppError("JOB_NOT_FOUND","Job not found",404);if(!isPlatformAdmin(user.role)){const target=await prisma.$queryRawUnsafe<{organizationId:string}[]>(`SELECT organization_id AS "organizationId" FROM recruiter_users WHERE id=$1 LIMIT 1`,req.params.recruiterId);if(!target[0]||target[0].organizationId!==user.organizationId)throw new AppError("FORBIDDEN","Recruiter is not in your organization",403);}await prisma.$executeRawUnsafe(`DELETE FROM recruiter_job_access WHERE recruiter_id=$1 AND job_id=$2`,req.params.recruiterId,job.id);return res.json({success:true});}catch(e){return sendError(res,e);}});
